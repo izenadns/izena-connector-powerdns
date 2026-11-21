@@ -10,7 +10,7 @@ import (
 
 	"github.com/izenadns/izena-connector-contract/abi"
 	"github.com/izenadns/izena-connector-contract/connector"
-	"github.com/izenadns/izena-connector-template/internal"
+	"github.com/izenadns/izena-connector-powerdns/internal"
 )
 
 //go:wasmimport izena_connector_v1 read_input
@@ -42,7 +42,7 @@ func run(size uint32) uint32 {
 		return 0
 	}
 	// Host imports enforce the calling request's context and deadline.
-	value, err := internal.Dispatch(context.Background(), internal.Provider{HTTP: exchange}, request)
+	value, err := internal.Dispatch(context.Background(), request, exchange)
 	result := abi.Result{Error: abi.EncodeFailure(err)}
 	if value != nil {
 		result.Value, err = abi.Marshal(value)
@@ -57,24 +57,24 @@ func run(size uint32) uint32 {
 	return writeOutput(unsafe.Pointer(unsafe.SliceData(raw)), uint32(len(raw)))
 }
 
-func exchange(_ context.Context, request abi.HTTPRequest) (abi.HTTPResponse, error) {
+func exchange(_ context.Context, request abi.HTTPRequest) (internal.Response, error) {
 	raw, err := abi.Marshal(request)
 	if err != nil || len(raw) > abi.MaxMessageBytes {
-		return abi.HTTPResponse{}, connector.ErrValidation
+		return internal.Response{}, connector.ErrValidation
 	}
 	size := httpRequest(unsafe.Pointer(unsafe.SliceData(raw)), uint32(len(raw)))
 	if size == 0 || size > abi.MaxMessageBytes {
-		return abi.HTTPResponse{}, connector.ErrUnavailable
+		return internal.Response{}, connector.ErrUnavailable
 	}
 	raw = make([]byte, size)
 	if httpResponse(unsafe.Pointer(unsafe.SliceData(raw)), size) != 1 {
-		return abi.HTTPResponse{}, connector.ErrUnavailable
+		return internal.Response{}, connector.ErrUnavailable
 	}
 	var response abi.HTTPResponse
 	if err := json.Unmarshal(raw, &response); err != nil {
-		return abi.HTTPResponse{}, connector.ErrMalformed
+		return internal.Response{}, connector.ErrMalformed
 	}
-	return response, response.Error.Decode()
+	return internal.Response{StatusCode: response.Status, Body: response.Body}, response.Error.Decode()
 }
 
 func main() {}

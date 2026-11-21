@@ -1,0 +1,97 @@
+x-pdns: &pdns
+  image: ${IZENA_PDNS_IMAGE:?set IZENA_PDNS_IMAGE}
+  platform: linux/amd64
+  environment:
+    IZENA_PDNS_API_KEY: ${IZENA_PDNS_API_KEY:?set IZENA_PDNS_API_KEY}
+  healthcheck:
+    test:
+      - CMD-SHELL
+      - >-
+        python3 -c "import os, urllib.request;
+        urllib.request.urlopen(urllib.request.Request('http://127.0.0.1:8081/api/v1/servers/localhost',
+        headers={'X-API-Key': os.environ['IZENA_PDNS_API_KEY']}), timeout=2).close()"
+    interval: 2s
+    timeout: 5s
+    retries: 15
+
+services:
+  pdns:
+    <<: *pdns
+    ports: ["127.0.0.1::8081"]
+    command:
+      - --api=yes
+      - --api-key=${IZENA_PDNS_API_KEY:?set IZENA_PDNS_API_KEY}
+      - --webserver=yes
+      - --webserver-address=0.0.0.0
+      - --webserver-allow-from=127.0.0.1,${IZENA_PDNS_SUBNET:-10.253.57.0/24}
+      - --webserver-port=8081
+      - --launch=gsqlite3
+      - --gsqlite3-database=/var/lib/powerdns/pdns.sqlite3
+      - --local-port=5353
+  primary:
+    <<: *pdns
+    ports: ["127.0.0.1::8081"]
+    command:
+      - --api=yes
+      - --api-key=${IZENA_PDNS_API_KEY:?set IZENA_PDNS_API_KEY}
+      - --webserver=yes
+      - --webserver-address=0.0.0.0
+      - --webserver-allow-from=127.0.0.1,${IZENA_PDNS_SUBNET:-10.253.57.0/24}
+      - --webserver-port=8081
+      - --launch=gsqlite3
+      - --gsqlite3-database=/var/lib/powerdns/pdns.sqlite3
+      - --local-port=5353
+      - --primary=yes
+      - --allow-axfr-ips=${IZENA_PDNS_SECONDARY_IP:-10.253.57.11}
+    networks:
+      default:
+        ipv4_address: ${IZENA_PDNS_PRIMARY_IP:-10.253.57.10}
+  secondary:
+    <<: *pdns
+    ports: ["127.0.0.1::8081"]
+    command:
+      - --api=yes
+      - --api-key=${IZENA_PDNS_API_KEY:?set IZENA_PDNS_API_KEY}
+      - --webserver=yes
+      - --webserver-address=0.0.0.0
+      - --webserver-allow-from=127.0.0.1,${IZENA_PDNS_SUBNET:-10.253.57.0/24}
+      - --webserver-port=8081
+      - --launch=gsqlite3
+      - --gsqlite3-database=/var/lib/powerdns/pdns.sqlite3
+      - --local-port=5353
+      - --secondary=yes
+    networks:
+      default:
+        ipv4_address: ${IZENA_PDNS_SECONDARY_IP:-10.253.57.11}
+
+  bind:
+    <<: *pdns
+    ports: ["127.0.0.1::8081"]
+    entrypoint: ["/usr/bin/tini", "--", "/bin/sh", "-ec"]
+    command:
+      - |
+        cat > /tmp/named.conf <<'EOF'
+        zone "read-only.example" {
+          type master;
+          file "/tmp/read-only.example.zone";
+        };
+        EOF
+        cat > /tmp/read-only.example.zone <<'EOF'
+        $$ORIGIN read-only.example.
+        $$TTL 3600
+        @ IN SOA ns hostmaster (1 3600 600 86400 3600)
+        @ IN NS ns
+        ns IN A 192.0.2.53
+        EOF
+        exec /usr/local/sbin/pdns_server-startup \
+          --api=yes --api-key="$${IZENA_PDNS_API_KEY}" \
+          --webserver=yes --webserver-address=0.0.0.0 \
+          --webserver-allow-from=127.0.0.1,${IZENA_PDNS_SUBNET:-10.253.57.0/24} \
+          --webserver-port=8081 --no-config --launch=bind \
+          --bind-config=/tmp/named.conf --local-port=5353
+
+networks:
+  default:
+    ipam:
+      config:
+        - subnet: ${IZENA_PDNS_SUBNET:-10.253.57.0/24}

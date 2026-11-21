@@ -8,16 +8,18 @@ import (
 	"github.com/izenadns/izena-connector-contract/connector"
 )
 
-// Dispatch maps each v1 operation to the corresponding provider method.
-func Dispatch(ctx context.Context, provider Provider, req abi.Request) (any, error) {
+// Dispatch maps ABI operations to PowerDNS calls scoped to the requested resource.
+func Dispatch(ctx context.Context, req abi.Request, exchange func(context.Context, abi.HTTPRequest) (Response, error)) (any, error) {
+	var provider Provider
 	switch req.Operation {
 	case abi.Describe:
 		return provider.Manifest(), nil
 	case abi.PrepareSettings:
 		return provider.PrepareSettings(ctx, req.Settings)
 	}
-	provider.HTTP = scopeHTTP(req.Operation, provider.HTTP)
-	client, err := provider.connect(req.Settings)
+	client, err := GuestClient(req.Settings, func(request abi.HTTPRequest) bool {
+		return allowedRequest(req, request)
+	}, exchange)
 	if err != nil {
 		return nil, err
 	}

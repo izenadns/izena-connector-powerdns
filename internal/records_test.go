@@ -30,11 +30,11 @@ func TestIndividualRecordDispatchIsUnsupported(t *testing.T) {
 				ZoneID: "fixture-zone", RecordID: "fixture-record",
 				Settings: map[string]string{baseURLKey: "https://dns.example.test"},
 			}
-			exchange := func(context.Context, abi.HTTPRequest) (abi.HTTPResponse, error) {
+			exchange := func(context.Context, abi.HTTPRequest) (Response, error) {
 				t.Fatal("unsupported individual-record operation issued an HTTP request")
-				return abi.HTTPResponse{}, nil
+				return Response{}, nil
 			}
-			if _, err := Dispatch(t.Context(), Provider{HTTP: exchange}, req); !errors.Is(err, test.wantError) {
+			if _, err := Dispatch(t.Context(), req, exchange); !errors.Is(err, test.wantError) {
 				t.Fatalf("Dispatch() = %v, want %v", err, test.wantError)
 			}
 		})

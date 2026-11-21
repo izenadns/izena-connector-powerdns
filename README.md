@@ -1,8 +1,8 @@
-# Izena DNS connector
+# Izena PowerDNS connector
 
-A WASI connector with a sample zone and an HTTP health probe. To adapt it,
-update the module path in `go.mod` and the command import, rename the command
-under `cmd/`, and implement your provider and tests under `internal/`.
+A WASI connector for PowerDNS Authoritative 5.x. It manages zones, RRsets,
+DNSSEC, and SOA serial policies through Izena. Set `PDNS_VERSION=5.0` or
+`PDNS_VERSION=5.1` to select the integration fixture.
 
 ## Development
 
@@ -17,6 +17,4 @@ make build
 
 ## License
 
-[Apache License 2.0](LICENSE-TEMPLATE) applies to the template. You can choose
-a license for your own changes while retaining the template's license and
-notices when distributing its code.
+[Apache License 2.0](LICENSE)

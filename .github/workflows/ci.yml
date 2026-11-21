@@ -97,10 +97,16 @@ jobs:
     needs: unit
     runs-on: ubuntu-26.04
     timeout-minutes: 15
+    strategy:
+      fail-fast: false
+      matrix:
+        pdns: ['5.0', '5.1']
+    env:
+      PDNS_VERSION: ${{ matrix.pdns }}
     steps:
       - *checkout
       - *setup-go
-      - name: test against the disposable HTTP fixture
+      - name: test against disposable PowerDNS servers
         run: make test-integration-fixtures
 
   release-please:

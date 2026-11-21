@@ -1,38 +1,34 @@
 package internal
 
 import (
-	"context"
-	"errors"
 	"net/http"
 	"testing"
 
 	"github.com/izenadns/izena-connector-contract/abi"
-	"github.com/izenadns/izena-connector-contract/connector"
 )
 
-func TestHTTPPolicyOnlyAllowsTheProbeRoute(t *testing.T) {
-	calls := 0
-	host := func(context.Context, abi.HTTPRequest) (abi.HTTPResponse, error) {
-		calls++
-		return abi.HTTPResponse{Status: http.StatusOK}, nil
-	}
-	probe := abi.HTTPRequest{Method: http.MethodGet, Parts: []string{"health"}}
-	if _, err := scopeHTTP(abi.Probe, host)(t.Context(), probe); err != nil {
-		t.Fatal(err)
-	}
+func TestHTTPPolicyBindsRequestsToOperationAndZone(t *testing.T) {
 	for _, test := range []struct {
+		name      string
 		operation abi.Operation
-		request   abi.HTTPRequest
+		method    string
+		parts     []string
+		want      bool
 	}{
-		{abi.ListZones, probe},
-		{abi.Probe, abi.HTTPRequest{Method: http.MethodPost, Parts: []string{"health"}}},
-		{abi.Probe, abi.HTTPRequest{Method: http.MethodGet, Parts: []string{"health", "detail"}}},
+		{"probe", abi.Probe, http.MethodGet, nil, true},
+		{"zone read", abi.GetZone, http.MethodGet, []string{"zones", "target."}, true},
+		{"other zone", abi.GetZone, http.MethodGet, []string{"zones", "other."}, false},
+		{"read cannot write", abi.GetZone, http.MethodPut, []string{"zones", "target."}, false},
+		{"DNSSEC keys", abi.GetDNSSEC, http.MethodGet, []string{"zones", "target.", "cryptokeys"}, true},
+		{"unexpected action", abi.NotifyZone, http.MethodPut, []string{"zones", "target.", "rectify"}, false},
+		{"expected action", abi.NotifyZone, http.MethodPut, []string{"zones", "target.", "notify"}, true},
 	} {
-		if _, err := scopeHTTP(test.operation, host)(t.Context(), test.request); !errors.Is(err, connector.ErrValidation) {
-			t.Fatalf("unexpected scope result for %s: %v", test.operation, err)
-		}
-	}
-	if calls != 1 {
-		t.Fatalf("host calls = %d, want one permitted call", calls)
+		t.Run(test.name, func(t *testing.T) {
+			call := abi.Request{Operation: test.operation, ZoneID: "target."}
+			request := abi.HTTPRequest{Method: test.method, Parts: test.parts}
+			if got := allowedRequest(call, request); got != test.want {
+				t.Fatalf("allowedRequest() = %t, want %t", got, test.want)
+			}
+		})
 	}
 }
